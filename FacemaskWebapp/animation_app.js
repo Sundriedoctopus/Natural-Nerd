@@ -3,10 +3,10 @@ var CTX;
 var CONFIG = {
     "animation_timing_ms": 100,
     "none_color": "#333333",
-    "grid_height": 12,
-    "grid_length": 30,
-    "led_size": 20,
-    "led_spacing": 17
+    "grid_height": 28,
+    "grid_length": 20,
+    "led_size": 15,
+    "led_spacing": 15
 }
 
 var animation; 
@@ -14,7 +14,7 @@ var playing = false;
 var insertAtTheEnd = false;
 var colorPicking = false;
 
-/* pencil, eraser */
+/* pencil, eraser, fill */
 var mode = "pencil"
 
 /* This funciton is stolen from: https://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb
@@ -42,10 +42,8 @@ function writeUint16(value, array)
         array.push(steps);
 }
 
-class Animation 
-{
-    constructor(leds) 
-    {
+class Animation {
+    constructor(leds) {
         this.leds = leds;
         this.stepCount = 0;
         this.currentIndex = 0;
@@ -54,38 +52,63 @@ class Animation
         this.colors = [{}]
     }
 
-    clickLed(x, y) 
-    {
+    clickLed(x, y) {
         for (let i = 0; i < CONFIG["grid_height"] * CONFIG["grid_length"]; i++) {
-            if (this.leds[i].checkCollision(x, y)) {
-                if (colorPicking) {
-                    let color = this.leds[i].getColor()
-                    if (color != CONFIG["none_color"]) {
-                        this.setColor(color.substr(1));
-                        document.getElementById("colorpicker").jscolor.fromString(color);
-                        console.log("setting color", color)
+
+            if (this.leds[i] != null) {
+
+                if (this.leds[i].checkCollision(x, y)) {
+                    if (colorPicking) {
+                        let color = this.leds[i].getColor()
+                        if (color != CONFIG["none_color"]) {
+                            this.setColor(color.substr(1));
+                            document.getElementById("colorpicker").jscolor.fromString(color);
+                            console.log("setting color", color);
+                        }
                     }
-                }
-                else if (mode == "pencil") {
+                    else if (mode == "pencil") {
+
+                        // print LED data to console - Index & Coordinates
+                        var division = CONFIG['led_size'] + CONFIG['led_spacing'];
+                        console.log("{ y: " + (this.leds[i].posX / division) + ", x: " + (this.leds[i].posY / division) + " }");
+                        this.leds[i].setIndex(i);
+                        console.log("LED Index: " +this.leds[i].getIndex());
+
                         this.leds[i].updateColor(this.use_color);
                         this.colors[this.currentIndex][this.use_color] = 1;
-                }
-
-                else if (mode == "eraser")
+                    }
+                    else if (mode == "eraser") {
                         this.leds[i].updateColor(CONFIG["none_color"]);
+                    }
+                    else if (mode == "fill") {
+                        let color = this.leds[i].getColor();
+                        for (let i = 0; i < CONFIG["grid_height"] * CONFIG["grid_length"]; i++) {
+                            if (this.leds[i] != null && color == this.leds[i].getColor()) {
+                                this.leds[i].updateColor(this.use_color);
+                            }
+                        }
+                        this.colors[this.currentIndex][this.use_color] = 1;
+                    }
+                    else if (mode == "flood") {
+                        for (let i = 0; i < CONFIG["grid_height"] * CONFIG["grid_length"]; i++) {
+                            if (this.leds[i] != null) {
+                                this.leds[i].updateColor(this.use_color); 
+                            }
+                        }
+                        this.colors[this.currentIndex][this.use_color] = 1;
+                    }
 
-                return true;
+                    return true;
+                }
             }
         }
         return false;
     }
 
-    getLedsWithColor(index, color) 
-    {
+    getLedsWithColor(index, color) {
         var led_indexes = []
         this.leds.forEach(led => {
-            if (led.hasColorInState(index, color)) 
-            {
+            if (led.hasColorInState(index, color)) {
                 led_indexes.push(led.getIndex());
             }
         });
@@ -108,40 +131,36 @@ class Animation
     uint8 r,
     uint8 g.... and so on
     */
-    
+
     export() {
         let data = [];
         let totalAnimationSteps = this.stepCount + 1;
 
         writeUint8(totalAnimationSteps, data);
-        
-        for (var i = 0; i < totalAnimationSteps; i++) 
-        {
+
+        for (var i = 0; i < totalAnimationSteps; i++) {
 
             let totalColorsInCurrentStep = Object.keys(this.colors[i]).length;
 
-            if (totalColorsInCurrentStep === 0 && totalAnimationSteps === 0)
-            {
+            if (totalColorsInCurrentStep === 0 && totalAnimationSteps === 0) {
                 console.log("Nothing to export.")
                 return;
             }
 
             writeUint16(totalColorsInCurrentStep, data);
 
-            for (const color of Object.keys(this.colors[i])) 
-            {
+            for (const color of Object.keys(this.colors[i])) {
                 let rgb = hexToRgb(color)
                 writeUint8(rgb.r, data)
                 writeUint8(rgb.g, data)
                 writeUint8(rgb.b, data)
                 let ledsWithThisColor = this.getLedsWithColor(i, color);
                 writeUint16(ledsWithThisColor.length, data)
+
                 ledsWithThisColor.forEach(elem => {
                     writeUint16(elem, data);
-                })
+                });
             }
-
-
         }
 
         var blob = new Blob(data, { type: "application/octet-stream" });
@@ -155,8 +174,7 @@ class Animation
 
     }
 
-    saveToJsonFile()
-    {
+    saveToJsonFile() {
         let data = {};
         data.leds = this.leds;
         data.stepCount = this.stepCount;
@@ -174,16 +192,15 @@ class Animation
         fileLink.click();
     }
 
-    loadFromJsonFile(jsonString)
-    {
+    loadFromJsonFile(jsonString) {
         this.playing = false;
         var data = null;
         try {
             data = JSON.parse(jsonString);
-        } catch(e) {
-           return false;
+        } catch (e) {
+            return false;
         }
-        if (!data){
+        if (!data) {
             return false;
         }
         clearAll();
@@ -212,20 +229,17 @@ class Animation
         return true;
     }
 
-    update() 
-    {
+    update() {
         this.updateLedState();
         this.draw();
     }
-    
-    insertStep() 
-    {
+
+    insertStep() {
         this.leds.forEach(led => {
             led.insert();
         });
     }
-    newStep(copy = false) 
-    {
+    newStep(copy = false) {
         this.stepCount++;
         var previousIndex = this.currentIndex;
         if (insertAtTheEnd) {
@@ -239,10 +253,8 @@ class Animation
 
         this.update();
 
-        if (copy && this.stepCount > 0) 
-        {
-            for (const color of Object.keys(this.colors[previousIndex])) 
-            {
+        if (copy && this.stepCount > 0) {
+            for (const color of Object.keys(this.colors[previousIndex])) {
                 this.colors[this.currentIndex][color] = 1;
             }
 
@@ -253,8 +265,7 @@ class Animation
         this.update();
     }
 
-    stepForward() 
-    {
+    stepForward() {
         if (this.currentIndex < this.stepCount) {
             this.currentIndex++;
         }
@@ -263,7 +274,8 @@ class Animation
         }
         this.update();
     }
-    
+
+
     clearAll() 
     {
         this.leds.forEach(led => {
@@ -321,18 +333,32 @@ class Animation
     
     deleteStep() 
     {
-     if (this.stepCount > 0)   {
-         this.leds.forEach(led => {
-            led.removeStep(this.currentIndex);
-            led.updateState(this.currentIndex - 1);
+         if (this.stepCount > 0)   {
+             this.leds.forEach(led => {
+                led.removeStep(this.currentIndex);
+                led.updateState(this.currentIndex - 1);
             
-         });
-         this.colors.splice(this.currentIndex, 1);
-         if (this.currentIndex != 0)
-            this.currentIndex--;
-         this.stepCount--;
-         this.update();
-     }
+             });
+             this.colors.splice(this.currentIndex, 1);
+             if (this.currentIndex != 0)
+                this.currentIndex--;
+             this.stepCount--;
+             this.update();
+         }
+    }
+
+    startDraw()
+    {
+        /*
+        for (let i = 0; i < CONFIG["grid_height"] * CONFIG["grid_length"]; i++) {
+            if (this.leds[i] != null) {
+                this.leds[i].updateColor('#000000');
+                this.colors[this.currentIndex]['#000000'] = 1;
+            }
+        }
+        */
+
+        this.draw();
     }
     
     draw() 
@@ -344,6 +370,7 @@ class Animation
            led.draw(); 
         });
     }
+
 }
 
 
@@ -360,7 +387,7 @@ class Led
         this.spacing = CONFIG["led_spacing"]
         this.posX = this.x * this.size + this.x * this.spacing;
         this.posY = this.y * this.size + this.y * this.spacing;
-
+        this.index = 0;
     }
 
     removeStep(idx) {
@@ -375,9 +402,15 @@ class Led
         return this.colorState[this.currentState];
     }
 
+    setIndex(i)
+    {
+        this.index = i;
+    }
+
     getIndex()
     {
-        return this.y * CONFIG["grid_length"] + this.x;
+        // return this.y * CONFIG["grid_length"] + this.x;
+        return this.index;
     }
 
     insert() {
@@ -461,20 +494,32 @@ function startDraw()
     var mouse_down = false;
     var c = document.getElementById("canvas");
     CTX = c.getContext("2d");
-    var height = 12;
-    var leds = []
+    var leds = [];
 
+
+    let index = 0;
     for (i = 0; i < CONFIG["grid_height"]; i++) 
     {
-        for (j = 0; j < CONFIG["grid_length"]; j++) 
-        {
-            leds.push(new Led(j, i))
+        for (j = 0; j < CONFIG["grid_length"]; j++) {
+
+            // add blanks
+            let blank = false;
+
+            for (k = 0; k < blanks.length; k++) {
+                if (blanks[k].x == i && blanks[k].y == j) {
+                    blank = true;
+                }
+            }
+
+            if (!blank) {
+                led = new Led(j, i);
+                leds.push(led);
+            }
         }
     }
 
     animation = new Animation(leds);
-    animation.draw();
-
+    animation.startDraw();
 
     c.onclick = function(e) 
     { 
@@ -540,9 +585,20 @@ function setMode(m)
     }
     else if (mode == "eraser") {
         $('#canvas').css({'cursor': "url('erasersmall.png') -10 40, pointer"});
-
+    }
+    else if (mode == "fill") {
+        $('#canvas').css({ 'cursor': "url('bucketsmall.png') 25 40, pointer" });
+    }
+    else if (mode == "flood") {
+        $('#canvas').css({ 'cursor': "url('bucketsmall.png') 25 40, pointer" });
     }
 }
+
+
+function fillAll() {
+    animation.fillAll();
+}
+
 
 function clearAll() {
     animation.clearAll()
@@ -622,3 +678,153 @@ function attachFileLoaderHandler(){
         }); 
     }
 }
+
+
+const blanks = [
+    // OUTLINE
+    { y: 0, x: 0 },
+    { y: 0, x: 1 },
+    { y: 0, x: 2 },
+    { y: 0, x: 3 },
+    { y: 0, x: 4 },
+    { y: 0, x: 5 },
+    { y: 0, x: 6 },
+    { y: 0, x: 18 },
+    { y: 0, x: 19 },
+    { y: 0, x: 20 },
+    { y: 0, x: 21 },
+    { y: 0, x: 22 },
+    { y: 0, x: 23 },
+    { y: 0, x: 23 },
+    { y: 0, x: 24 },
+    { y: 0, x: 25 },
+    { y: 0, x: 26 },
+    { y: 0, x: 27 },
+    { y: 1, x: 0 },
+    { y: 1, x: 1 },
+    { y: 1, x: 2 },
+    { y: 1, x: 3 },
+    { y: 1, x: 21 },
+    { y: 1, x: 22 },
+    { y: 1, x: 23 },
+    { y: 1, x: 24 },
+    { y: 1, x: 25 },
+    { y: 1, x: 26 },
+    { y: 1, x: 27 },
+    { y: 2, x: 0 },
+    { y: 2, x: 1 },
+    { y: 2, x: 2 },
+    { y: 2, x: 23 },
+    { y: 2, x: 24 },
+    { y: 2, x: 25 },
+    { y: 2, x: 26 },
+    { y: 2, x: 27 },
+    { y: 3, x: 0 },
+    { y: 3, x: 1 },
+    { y: 3, x: 25 },
+    { y: 3, x: 26 },
+    { y: 3, x: 27 },
+    { y: 4, x: 0 },
+    { y: 4, x: 1 },
+    { y: 4, x: 26 },
+    { y: 4, x: 27 },
+    { y: 5, x: 0 },
+    { y: 5, x: 27 },
+    { y: 6, x: 0 },
+    { y: 6, x: 27 },
+    { y: 13, x: 0 },
+    { y: 13, x: 27 },
+    { y: 14, x: 0 },
+    { y: 14, x: 27 },
+    { y: 15, x: 0 },
+    { y: 15, x: 1 },
+    { y: 15, x: 26 },
+    { y: 15, x: 27 },
+    { y: 16, x: 0 },
+    { y: 16, x: 1 },
+    { y: 16, x: 25 },
+    { y: 16, x: 26 },
+    { y: 16, x: 27 },
+    { y: 17, x: 0 },
+    { y: 17, x: 1 },
+    { y: 17, x: 1 },
+    { y: 17, x: 2 },
+    { y: 17, x: 23 },
+    { y: 17, x: 24 },
+    { y: 17, x: 25 },
+    { y: 17, x: 26 },
+    { y: 17, x: 27 },
+    { y: 18, x: 0 },
+    { y: 18, x: 1 },
+    { y: 18, x: 2 },
+    { y: 18, x: 3 },
+    { y: 18, x: 21 },
+    { y: 18, x: 22 },
+    { y: 18, x: 23 },
+    { y: 18, x: 24 },
+    { y: 18, x: 25 },
+    { y: 18, x: 26 },
+    { y: 18, x: 26 },
+    { y: 18, x: 27 },
+    { y: 19, x: 0 },
+    { y: 19, x: 1 },
+    { y: 19, x: 2 },
+    { y: 19, x: 3 },
+    { y: 19, x: 4 },
+    { y: 19, x: 4 },
+    { y: 19, x: 5 },
+    { y: 19, x: 5 },
+    { y: 19, x: 6 },
+    { y: 19, x: 18 },
+    { y: 19, x: 19 },
+    { y: 19, x: 20 },
+    { y: 19, x: 20 },
+    { y: 19, x: 21 },
+    { y: 19, x: 21 },
+    { y: 19, x: 22 },
+    { y: 19, x: 22 },
+    { y: 19, x: 23 },
+    { y: 19, x: 24 },
+    { y: 19, x: 24 },
+    { y: 19, x: 25 },
+    { y: 19, x: 26 },
+    { y: 19, x: 27 },
+    { y: 3, x: 24 },
+    { y: 4, x: 25 },
+    { y: 5, x: 26 },
+    { y: 6, x: 26 },
+    { y: 7, x: 27 },
+    { y: 7, x: 27 },
+    { y: 8, x: 27 },
+    { y: 8, x: 27 },
+    { y: 9, x: 27 },
+    { y: 10, x: 27 },
+    { y: 11, x: 27 },
+    { y: 12, x: 27 },
+    { y: 13, x: 26 },
+    { y: 13, x: 26 },
+    { y: 14, x: 26 },
+    { y: 15, x: 25 },
+    { y: 16, x: 24 },
+    // EYES
+    { y: 4, x: 10 },
+    { y: 5, x: 10 },
+    { y: 6, x: 10 },
+    { y: 13, x: 10 },
+    { y: 14, x: 10 },
+    { y: 15, x: 10 },
+    { y: 15, x: 10 },
+    { y: 3, x: 11 },
+    { y: 4, x: 11 },
+    { y: 5, x: 11 },
+    { y: 6, x: 11 },
+    { y: 7, x: 11 },
+    { y: 12, x: 11 },
+    { y: 13, x: 11 },
+    { y: 13, x: 11 },
+    { y: 14, x: 11 },
+    { y: 14, x: 11 },
+    { y: 15, x: 11 },
+    { y: 16, x: 11 },
+];
+

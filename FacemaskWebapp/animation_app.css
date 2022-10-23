@@ -4,13 +4,22 @@ body {
 }
 
 #canvas {
-    margin-top: 20px;
+    margin: 0 auto;
     cursor: url('pencilsmall.png') -10 40, pointer;
+    display: flex;
 }
+
+#animationArea {
+    flex: 0 0 65%;
+    max-width: 1117px;
+    background-color: #111;
+    padding: 30px 10px 10px 10px;
+    display: inline-block;
+}
+
 #toolbar {
     cursor: url('pencilsmall.png');
-    margin-left: 20px;
-    flex: 1; 
+    flex: 1;
     background-color: #111;
     max-width: 80px;
     padding: 10 5 5 5;
@@ -30,14 +39,22 @@ body {
     margin-left: -12px;
 }
 
+#colorpicker {
+    height: 70px;
+    width: 70px;
+    text-align: center;
+}
+
 #steps {
     font-weight: 700;
     font-size: 28px;
     color: #ddd;
+    position: absolute;
+    top: 5;
 }
 
 #controls {
-        margin-top: 15px;
+    margin-top: 15px;
 }
 
 #controls .button {
@@ -52,13 +69,12 @@ body {
 #overlay {
     position: absolute;
     background-color: #333;
-    width: 1093px;
+    width: 100%;
     margin-top: 20px;
-    height: 427px;
+    height: 100%;
     opacity: 0.6;
     text-align: center;
     vertical-align: middle;
     padding-top: 200px;
     font-size: 120px;
-
 }
